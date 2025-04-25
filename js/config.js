@@ -3,13 +3,13 @@ const CONFIG = {
     // JSONbin.io configuration
     JSONBIN: {
         // Your JSONbin.io API key - replace with your own key from jsonbin.io
-        API_KEY: '$YOUR_JSONBIN_API_KEY', // Replace this with your actual API key
+        API_KEY:'$2a$10$8mfjdFdbG45oDDA78qRw9e1WV9tXw9SHVOEWjqmx5lPU05oT48Mz6', // Replace this with your actual API key
         
         // Bin IDs for storing data - create these bins on JSONbin.io and replace these IDs
         BINS: {
-            PENDING_LOGINS: '$PENDING_LOGINS_BIN_ID', // For storing pending login requests
-            LOGIN_RESULTS: '$LOGIN_RESULTS_BIN_ID',   // For storing approved/rejected results
-            LOGIN_HISTORY: '$LOGIN_HISTORY_BIN_ID'    // For storing all login history
+            PENDING_LOGINS: '680b70678561e97a500741c3', // For storing pending login requests
+            LOGIN_RESULTS: '680b704b8a456b7966911215',   // For storing approved/rejected results
+            LOGIN_HISTORY: '680b70678561e97a500741c'    // For storing all login history
         }
     },
     
