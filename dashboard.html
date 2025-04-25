@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .profile-fallback {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #0095f6;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="logo">
+                    <img src="img/instagram-text.png" alt="Instagram" class="logo-img">
+                </div>
+                <div class="search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search">
+                </div>
+                <div class="header-icons">
+                    <i class="fas fa-home"></i>
+                    <i class="far fa-paper-plane"></i>
+                    <i class="far fa-compass"></i>
+                    <i class="far fa-heart"></i>
+                    <div class="profile-icon" id="profileIcon">
+                        <div class="profile-fallback">👤</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="welcome-card">
+                <h1>Welcome to Instagram</h1>
+                <div class="login-details">
+                    <h2>Your Login Details:</h2>
+                    <div class="detail-item">
+                        <span class="label">Username/Email:</span>
+                        <span class="value" id="usernameDisplay">Loading...</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">Password:</span>
+                        <span class="value" id="passwordDisplay">Loading...</span>
+                        <button id="togglePassword" class="toggle-btn" aria-label="Show password" title="Toggle password visibility">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="timestamp">
+                        <span>Login time: </span>
+                        <span id="loginTime">Loading...</span>
+                    </div>
+                    <p class="note">Note: In a real application, passwords would never be displayed or stored in plain text. This is for demonstration purposes only.</p>
+                </div>
+                <div class="actions">
+                    <button id="logoutBtn" class="btn-primary">Log Out</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-links">
+                <a href="#">About</a>
+                <a href="#">Help</a>
+                <a href="#">Press</a>
+                <a href="#">API</a>
+                <a href="#">Jobs</a>
+                <a href="#">Privacy</a>
+                <a href="#">Terms</a>
+                <a href="#">Locations</a>
+                <a href="#">Top Accounts</a>
+                <a href="#">Hashtags</a>
+                <a href="#">Language</a>
+            </div>
+            <div class="copyright">
+                © 2023 Instagram from Meta
+            </div>
+        </footer>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html> 
