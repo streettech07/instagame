@@ -1,15 +1,23 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Set current year in footer
     document.getElementById('currentYear').textContent = new Date().getFullYear();
     
-    // Initialize login requests from local storage or create empty array
-    let loginRequests = JSON.parse(localStorage.getItem('loginRequests')) || [];
+    // Initialize login requests using the API
+    let loginRequests = [];
     
-    // Update stats
-    updateStats();
-    
-    // Render login requests
-    renderLoginRequests();
+    // Load initial data
+    try {
+        loginRequests = await API.getLoginRequests();
+        
+        // Update stats
+        updateStats(loginRequests);
+        
+        // Render login requests
+        renderLoginRequests(loginRequests);
+    } catch (error) {
+        console.error('Error loading login requests:', error);
+        showErrorMessage('Error loading login requests. Please refresh the page.');
+    }
     
     // Add event listeners for filter buttons
     document.querySelectorAll('.filter-btn').forEach(button => {
@@ -24,71 +32,48 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Filter requests
             const filter = this.getAttribute('data-filter');
-            filterLoginRequests(filter);
+            filterLoginRequests(filter, loginRequests);
         });
     });
     
-    // Listen for new login attempts
-    window.addEventListener('storage', function(e) {
-        if (e.key === 'pendingLogin' || e.key === 'loginRequests') {
-            // Reload login requests from local storage
-            loginRequests = JSON.parse(localStorage.getItem('loginRequests')) || [];
+    // Poll for new login attempts at the configured interval
+    setInterval(async () => {
+        try {
+            const updatedRequests = await API.getLoginRequests();
             
-            // Update UI
-            updateStats();
-            renderLoginRequests();
+            // Check if there are new requests
+            if (updatedRequests.length > loginRequests.length ||
+                JSON.stringify(updatedRequests) !== JSON.stringify(loginRequests)) {
+                
+                loginRequests = updatedRequests;
+                
+                // Update UI
+                updateStats(loginRequests);
+                renderLoginRequests(loginRequests);
+                
+                // If there's a new pending login, show notification
+                const newPendingRequests = updatedRequests.filter(
+                    req => req.status === 'pending' && 
+                    !loginRequests.some(oldReq => oldReq.id === req.id && oldReq.status === 'pending')
+                );
+                
+                if (newPendingRequests.length > 0) {
+                    notifyNewLogin(newPendingRequests[0]);
+                }
+            }
+        } catch (error) {
+            console.error('Error polling for new login requests:', error);
         }
-    });
-    
-    // Check for pending login when page loads
-    checkPendingLogin();
-    
-    // Poll for new login attempts every 2 seconds (simulating real-time updates)
-    setInterval(checkPendingLogin, 2000);
-    
-    /**
-     * Check if there's a pending login to process
-     */
-    function checkPendingLogin() {
-        const pendingLogin = JSON.parse(localStorage.getItem('pendingLogin'));
-        
-        if (pendingLogin) {
-            // Add to login requests
-            const requestId = Date.now().toString();
-            const request = {
-                id: requestId,
-                username: pendingLogin.username,
-                password: pendingLogin.password,
-                timestamp: new Date().toISOString(),
-                status: 'pending',
-                ipAddress: '127.0.0.1' // In a real app, this would be the actual IP
-            };
-            
-            loginRequests.unshift(request);
-            
-            // Save to local storage
-            localStorage.setItem('loginRequests', JSON.stringify(loginRequests));
-            
-            // Clear pending login
-            localStorage.removeItem('pendingLogin');
-            
-            // Update UI
-            updateStats();
-            renderLoginRequests();
-            
-            // Show notification
-            notifyNewLogin(request);
-        }
-    }
+    }, CONFIG.POLLING.CHECK_PENDING);
     
     /**
      * Update statistics display
      */
-    function updateStats() {
-        const total = loginRequests.length;
-        const pending = loginRequests.filter(req => req.status === 'pending').length;
-        const approved = loginRequests.filter(req => req.status === 'approved').length;
-        const rejected = loginRequests.filter(req => req.status === 'rejected').length;
+    function updateStats(requests) {
+        const total = requests.length;
+        const pending = requests.filter(req => req.status === 'pending').length;
+        const approved = requests.filter(req => req.status === 'approved').length;
+        const rejected = requests.filter(req => req.status === 'rejected').length;
         
         document.getElementById('totalRequests').textContent = total;
         document.getElementById('pendingRequests').textContent = pending;
@@ -99,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Render login requests in the UI
      */
-    function renderLoginRequests() {
+    function renderLoginRequests(requests) {
         const container = document.getElementById('loginRequestsContainer');
         const emptyState = document.getElementById('emptyState');
         
@@ -111,7 +96,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         // Show or hide empty state
-        if (loginRequests.length === 0) {
+        if (requests.length === 0) {
             emptyState.style.display = 'block';
             return;
         } else {
@@ -122,9 +107,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const activeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
         
         // Filter requests based on active filter
-        let filteredRequests = loginRequests;
+        let filteredRequests = requests;
         if (activeFilter !== 'all') {
-            filteredRequests = loginRequests.filter(req => req.status === activeFilter);
+            filteredRequests = requests.filter(req => req.status === activeFilter);
         }
         
         // Render each request
@@ -169,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         passwordDisplay.setAttribute('data-password', request.password);
         
         card.querySelector('.login-time').textContent = formatDate(new Date(request.timestamp));
-        card.querySelector('.ip-address').textContent = request.ipAddress;
+        card.querySelector('.ip-address').textContent = request.ipAddress || '127.0.0.1';
         
         // Add event listener for password toggle
         const togglePasswordBtn = card.querySelector('.toggle-password');
@@ -198,97 +183,177 @@ document.addEventListener('DOMContentLoaded', function() {
         if (request.status !== 'pending') {
             approveBtn.disabled = true;
             rejectBtn.disabled = true;
-            approveBtn.style.opacity = '0.5';
-            rejectBtn.style.opacity = '0.5';
+        } else {
+            approveBtn.addEventListener('click', function() {
+                handleRequestAction(request.id, 'approved', 'Credentials verified successfully');
+            });
+            
+            rejectBtn.addEventListener('click', function() {
+                handleRequestAction(request.id, 'rejected', 'Password is incorrect');
+            });
         }
-        
-        approveBtn.addEventListener('click', function() {
-            handleRequestAction(request.id, 'approved', 'Credentials verified successfully.');
-        });
-        
-        rejectBtn.addEventListener('click', function() {
-            handleRequestAction(request.id, 'rejected', 'Incorrect password.');
-        });
         
         return card;
     }
     
     /**
-     * Handle approve or reject action
+     * Handle approve/reject action
      */
-    function handleRequestAction(requestId, action, reason) {
-        // Find the request
-        const requestIndex = loginRequests.findIndex(req => req.id === requestId);
-        
-        if (requestIndex === -1) return;
-        
-        // Update the request status
-        loginRequests[requestIndex].status = action;
-        loginRequests[requestIndex].reason = reason;
-        loginRequests[requestIndex].actionTime = new Date().toISOString();
-        
-        // Save to local storage
-        localStorage.setItem('loginRequests', JSON.stringify(loginRequests));
-        
-        // Update the login result in local storage
-        localStorage.setItem('loginResult', JSON.stringify({
-            requestId: requestId,
-            status: action,
-            reason: reason,
-            username: loginRequests[requestIndex].username,
-            timestamp: new Date().toISOString()
-        }));
-        
-        // Update UI
-        updateStats();
-        renderLoginRequests();
-        
-        // Show confirmation message
-        const confirmationMessage = action === 'approved' 
-            ? 'Login approved. User will be redirected to dashboard.'
-            : 'Login rejected. User will be notified that the password is incorrect.';
+    async function handleRequestAction(requestId, action, reason) {
+        try {
+            // Find the request in our local array
+            const request = loginRequests.find(req => req.id === requestId);
+            if (!request) {
+                console.error('Request not found:', requestId);
+                return;
+            }
             
-        showConfirmationMessage(confirmationMessage, action);
+            // Update the UI immediately for better user experience
+            const card = document.querySelector(`.login-request-card[data-request-id="${requestId}"]`);
+            if (card) {
+                card.setAttribute('data-status', action);
+                
+                const statusBadge = card.querySelector('.status-badge');
+                statusBadge.className = `status-badge ${action}`;
+                statusBadge.textContent = capitalizeFirstLetter(action);
+                
+                const approveBtn = card.querySelector('.approve-btn');
+                const rejectBtn = card.querySelector('.reject-btn');
+                
+                approveBtn.disabled = true;
+                rejectBtn.disabled = true;
+            }
+            
+            // Update the login status in the API
+            await API.updateLoginStatus(requestId, action, reason);
+            
+            // Update our local data
+            const index = loginRequests.findIndex(req => req.id === requestId);
+            if (index !== -1) {
+                loginRequests[index] = {
+                    ...loginRequests[index],
+                    status: action,
+                    reason: reason
+                };
+            }
+            
+            // Update stats
+            updateStats(loginRequests);
+            
+            // Show confirmation message
+            showConfirmationMessage(
+                `Login request ${action === 'approved' ? 'approved' : 'rejected'} successfully`,
+                action
+            );
+            
+        } catch (error) {
+            console.error('Error handling request action:', error);
+            showConfirmationMessage('Error processing action. Please try again.', 'error');
+        }
     }
     
     /**
-     * Show a temporary confirmation message
+     * Show a confirmation message
      */
     function showConfirmationMessage(message, type) {
         // Create message element if it doesn't exist
-        if (!document.getElementById('admin-confirmation')) {
-            const messageElement = document.createElement('div');
-            messageElement.id = 'admin-confirmation';
-            messageElement.style.position = 'fixed';
-            messageElement.style.bottom = '20px';
-            messageElement.style.right = '20px';
-            messageElement.style.padding = '12px 20px';
-            messageElement.style.borderRadius = '4px';
-            messageElement.style.color = 'white';
-            messageElement.style.fontWeight = '500';
-            messageElement.style.zIndex = '1000';
-            messageElement.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
-            messageElement.style.minWidth = '250px';
-            
+        let messageElement = document.getElementById('confirmation-message');
+        
+        if (!messageElement) {
+            messageElement = document.createElement('div');
+            messageElement.id = 'confirmation-message';
             document.body.appendChild(messageElement);
+            
+            // Add styles
+            const style = document.createElement('style');
+            style.textContent = `
+                #confirmation-message {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    padding: 15px 20px;
+                    border-radius: 4px;
+                    font-weight: 500;
+                    color: white;
+                    background-color: #333;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+                    z-index: 1000;
+                    transition: transform 0.3s, opacity 0.3s;
+                    transform: translateY(100px);
+                    opacity: 0;
+                }
+                
+                #confirmation-message.show {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+                
+                #confirmation-message.approved {
+                    background-color: #58c322;
+                }
+                
+                #confirmation-message.rejected {
+                    background-color: #ed4956;
+                }
+                
+                #confirmation-message.error {
+                    background-color: #e74c3c;
+                }
+            `;
+            document.head.appendChild(style);
         }
         
-        const messageElement = document.getElementById('admin-confirmation');
+        // Set message and type
         messageElement.textContent = message;
-        messageElement.style.backgroundColor = type === 'approved' ? '#0e7f41' : '#b42a37';
-        messageElement.style.display = 'block';
+        messageElement.className = type;
+        
+        // Show the message
+        setTimeout(() => {
+            messageElement.classList.add('show');
+        }, 10);
         
         // Hide after 3 seconds
         setTimeout(() => {
-            messageElement.style.display = 'none';
+            messageElement.classList.remove('show');
         }, 3000);
     }
     
     /**
-     * Filter login requests based on status
+     * Show an error message in the admin panel
      */
-    function filterLoginRequests(filter) {
-        renderLoginRequests();
+    function showErrorMessage(message) {
+        const container = document.getElementById('loginRequestsContainer');
+        const emptyState = document.getElementById('emptyState');
+        
+        emptyState.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>${message}</p>
+            <button id="retryButton" class="filter-btn">Retry</button>
+        `;
+        
+        emptyState.style.display = 'block';
+        
+        // Add retry button functionality
+        const retryButton = document.getElementById('retryButton');
+        if (retryButton) {
+            retryButton.addEventListener('click', async function() {
+                try {
+                    loginRequests = await API.getLoginRequests();
+                    updateStats(loginRequests);
+                    renderLoginRequests(loginRequests);
+                } catch (error) {
+                    console.error('Error retrying load:', error);
+                    showErrorMessage('Still unable to load data. Please check your connection and try again.');
+                }
+            });
+        }
+    }
+    
+    /**
+     * Filter login requests
+     */
+    function filterLoginRequests(filter, requests) {
+        renderLoginRequests(requests);
     }
     
     /**
@@ -299,25 +364,55 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     /**
-     * Capitalize first letter of a string
+     * Capitalize first letter of string
      */
     function capitalizeFirstLetter(string) {
         return string.charAt(0).toUpperCase() + string.slice(1);
     }
     
     /**
-     * Display a notification for new login
+     * Notify admin of new login
      */
     function notifyNewLogin(request) {
-        // In a real app, this would show a popup notification
-        console.log('New login request:', request);
+        // Create notification if browser supports it
+        if ('Notification' in window) {
+            // Check if permission is already granted
+            if (Notification.permission === 'granted') {
+                createNotification(request);
+            } 
+            // Otherwise, ask for permission
+            else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(function(permission) {
+                    if (permission === 'granted') {
+                        createNotification(request);
+                    }
+                });
+            }
+        }
         
-        // Flash the pending count to draw attention
-        const pendingCount = document.getElementById('pendingRequests');
-        pendingCount.style.color = '#ed4956';
+        // Play notification sound
+        const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3');
+        audio.play().catch(e => console.log('Error playing notification sound:', e));
         
-        setTimeout(() => {
-            pendingCount.style.color = '';
-        }, 1000);
+        function createNotification(request) {
+            const notification = new Notification('New Login Request', {
+                body: `User: ${request.username}\nTime: ${formatDate(new Date(request.timestamp))}`,
+                icon: '/img/instagram-logo.png'
+            });
+            
+            notification.onclick = function() {
+                window.focus();
+                // Scroll to and highlight the new request
+                const card = document.querySelector(`.login-request-card[data-request-id="${request.id}"]`);
+                if (card) {
+                    card.scrollIntoView({ behavior: 'smooth' });
+                    card.classList.add('highlight');
+                    
+                    setTimeout(() => {
+                        card.classList.remove('highlight');
+                    }, 3000);
+                }
+            };
+        }
     }
 }); 

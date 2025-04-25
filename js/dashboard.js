@@ -1,67 +1,166 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Set current year in footer
-    document.getElementById('currentYear').textContent = new Date().getFullYear();
+    const yearElement = document.getElementById('currentYear');
+    if (yearElement) {
+        yearElement.textContent = new Date().getFullYear();
+    }
     
-    // Check if user is logged in (has been approved by admin)
-    const loginResult = JSON.parse(localStorage.getItem('loginResult'));
+    // Get login information
+    let requestId = new URLSearchParams(window.location.search).get('requestId');
+    let loginData = null;
     
-    if (!loginResult || loginResult.status !== 'approved') {
-        // Redirect to login page if not approved
+    // If no requestId in URL, try from localStorage
+    if (!requestId) {
+        const storedLoginResult = localStorage.getItem('loginResult');
+        if (storedLoginResult) {
+            const loginResult = JSON.parse(storedLoginResult);
+            requestId = loginResult.requestId;
+        }
+    }
+    
+    if (!requestId) {
+        // No login information available, redirect to login page
         window.location.href = 'index.html';
         return;
     }
     
-    // Display user info from login result
-    document.getElementById('welcomeUsername').textContent = loginResult.username;
-    document.getElementById('profileUsername').textContent = loginResult.username;
-    document.getElementById('profileEmail').textContent = loginResult.username.includes('@') 
-        ? loginResult.username 
-        : loginResult.username + '@example.com';
-    
-    // Set avatar initial
-    const avatarElement = document.querySelector('.profile-icon');
-    if (avatarElement) {
-        avatarElement.textContent = loginResult.username.charAt(0).toUpperCase();
-    }
-    
-    // Add timestamp to when the user was approved
-    const timestampElement = document.getElementById('loginTimestamp');
-    if (timestampElement && loginResult.timestamp) {
-        timestampElement.textContent = formatDate(new Date(loginResult.timestamp));
-    }
-    
-    // Toggle password visibility
-    const passwordToggle = document.getElementById('togglePassword');
-    const passwordField = document.getElementById('password');
-    
-    if (passwordToggle && passwordField) {
-        // Retrieve login details from local storage
-        const loginRequests = JSON.parse(localStorage.getItem('loginRequests')) || [];
-        const userRequest = loginRequests.find(req => req.id === loginResult.requestId);
+    try {
+        // Get the login result from JSONbin
+        const loginResult = await API.checkLoginResult(requestId);
         
-        if (userRequest) {
-            // Set masked password initially
-            passwordField.textContent = '•'.repeat(userRequest.password.length);
-            passwordField.setAttribute('data-password', userRequest.password);
-            
-            // Add toggle functionality
-            passwordToggle.addEventListener('click', function() {
-                const passwordElem = document.getElementById('password');
+        if (!loginResult || loginResult.status !== 'approved') {
+            // Not approved, redirect to login page
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        // Get the full login details from pending logins or history
+        const pendingData = await API.readBin(CONFIG.JSONBIN.BINS.PENDING_LOGINS);
+        const historyData = await API.readBin(CONFIG.JSONBIN.BINS.LOGIN_HISTORY);
+        
+        const pendingLogins = pendingData.requests || [];
+        const loginHistory = historyData.history || [];
+        
+        // Try to find the login request in either pending or history
+        loginData = pendingLogins.find(req => req.id === requestId) || 
+                   loginHistory.find(req => req.id === requestId);
+        
+        if (!loginData) {
+            // Can't find detailed login data, redirect to login page
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        // Display login details
+        displayLoginDetails(loginData);
+        
+    } catch (error) {
+        console.error('Error loading login details:', error);
+        showErrorMessage('Unable to load your login details. Please try logging in again.');
+    }
+    
+    /**
+     * Display login details in the dashboard
+     */
+    function displayLoginDetails(loginData) {
+        // Display username
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay) {
+            usernameDisplay.textContent = loginData.username;
+        }
+        
+        // Display password (masked by default)
+        const passwordDisplay = document.getElementById('passwordDisplay');
+        if (passwordDisplay && loginData.password) {
+            passwordDisplay.textContent = '•'.repeat(loginData.password.length);
+            passwordDisplay.setAttribute('data-password', loginData.password);
+        }
+        
+        // Handle password toggle
+        const togglePasswordBtn = document.getElementById('togglePassword');
+        if (togglePasswordBtn && passwordDisplay) {
+            togglePasswordBtn.addEventListener('click', function() {
                 const icon = this.querySelector('i');
-                const maskedPassword = '•'.repeat(userRequest.password.length);
+                const maskedPassword = '•'.repeat(loginData.password.length);
                 
-                if (passwordElem.textContent === maskedPassword) {
+                if (passwordDisplay.textContent === maskedPassword) {
                     // Show password
-                    passwordElem.textContent = userRequest.password;
+                    passwordDisplay.textContent = loginData.password;
                     icon.classList.remove('fa-eye');
                     icon.classList.add('fa-eye-slash');
                 } else {
                     // Hide password
-                    passwordElem.textContent = maskedPassword;
+                    passwordDisplay.textContent = maskedPassword;
                     icon.classList.remove('fa-eye-slash');
                     icon.classList.add('fa-eye');
                 }
             });
+        }
+        
+        // Display login time
+        const loginTime = document.getElementById('loginTime');
+        if (loginTime) {
+            loginTime.textContent = formatDate(new Date(loginData.timestamp));
+        }
+        
+        // Update avatar
+        const profileIcon = document.getElementById('profileIcon');
+        if (profileIcon) {
+            const firstLetter = loginData.username.charAt(0).toUpperCase();
+            profileIcon.querySelector('.profile-fallback').textContent = firstLetter;
+        }
+    }
+    
+    /**
+     * Show an error message on the dashboard
+     */
+    function showErrorMessage(message) {
+        const mainElement = document.querySelector('main');
+        if (mainElement) {
+            const errorElement = document.createElement('div');
+            errorElement.className = 'error-card';
+            errorElement.innerHTML = `
+                <h2>Error</h2>
+                <p>${message}</p>
+                <button id="backToLoginBtn" class="btn-primary">Back to Login</button>
+            `;
+            
+            // Add styles
+            const style = document.createElement('style');
+            style.textContent = `
+                .error-card {
+                    background-color: white;
+                    border-radius: 8px;
+                    padding: 24px;
+                    margin: 20px auto;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                    text-align: center;
+                    max-width: 400px;
+                }
+                
+                .error-card h2 {
+                    color: #ed4956;
+                    margin-bottom: 16px;
+                }
+                
+                .error-card p {
+                    margin-bottom: 24px;
+                    color: #8e8e8e;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Clear main content and add error
+            mainElement.innerHTML = '';
+            mainElement.appendChild(errorElement);
+            
+            // Add button functionality
+            const backButton = document.getElementById('backToLoginBtn');
+            if (backButton) {
+                backButton.addEventListener('click', function() {
+                    window.location.href = 'index.html';
+                });
+            }
         }
     }
     
@@ -71,6 +170,7 @@ document.addEventListener('DOMContentLoaded', function() {
         logoutBtn.addEventListener('click', function() {
             // Clear login result
             localStorage.removeItem('loginResult');
+            localStorage.removeItem('currentLoginRequestId');
             
             // Redirect to login page
             window.location.href = 'index.html';
